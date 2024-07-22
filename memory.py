@@ -1,43 +1,51 @@
 import threading
 from collections import defaultdict, deque
+from identity import IdentityContext
 
 class Atomix:
     def __init__(self):
         self.data = {}
-        self._local = threading.local()
+        self.count = 0
         self._lock = threading.Lock()
+        self._transactions = defaultdict(lambda: defaultdict(dict))
+        self._stores = defaultdict(lambda: defaultdict(deque))
 
-    def start_transaction(self):
-        self._local.transaction = defaultdict(dict)
+    def initiate(self, identity):
+        return IdentityContext(self, identity.id)
 
-    def commit(self):
+    def commit(self, identity_id):
         with self._lock:
-            self.data.update(self._local.transaction)
-            self._local.transaction.clear()
+            self.data.update(self._transactions[identity_id])
+            self._transactions[identity_id].clear()
 
-    def abort(self):
-        self._local.transaction.clear()
+    def abort(self, identity_id):
+        self._transactions[identity_id].clear()
     
-    def read(self, key):
-        if key in self._local.transaction:
-            return self._local.transaction[key]
+    def read(self, identity_id, key):
+        if key in self._transactions[identity_id]:
+            return self._transactions[identity_id][key]
         with self._lock:
-            return self.data[key]  # Added return statement
+            return self.data[key]  
     
-    def write(self, key, value):
-        self._local.transaction[key] = value
+    def write(self, identity_id, key, value):
+        self._transactions[identity_id][key] = value
 
-    def delete(self, key):
-        self._local.transaction[key] = None
-    
-    def create_store(self):
-        self._local.store = deque()
+    def delete(self, identity_id, key):
+        self._transactions[identity_id][key] = None
 
-    def store(self, key, value):
+    def store(self, identity_id, key, value):
         pair = [key, value]
-        self._local.store.append(pair)  # Changed queue to store
+        self._stores[identity_id].append(pair) 
 
-    def offload_store(self):
-        while self._local.store:  # Changed self.local to self._local
-            pair = self._local.store.pop()
-            self._local.transaction[pair[0]] = pair[1]
+    def offload_store(self, identity_id):
+        while self._stores[identity_id]: 
+            pair = self._stores[identity_id].pop()
+            self._transactions[identity_id][pair[0]] = pair[1]
+
+    def register(self, identity):
+        with self._lock:
+            if identity.id not in self._transactions:
+                self._transactions[identity.id] = defaultdict(dict)
+                self._stores[identity.id] = deque()
+                self.count += 1
+
