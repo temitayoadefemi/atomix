@@ -1,6 +1,13 @@
 import threading
 from collections import defaultdict, deque
 from identity import IdentityContext
+from enum import Enum
+
+class IsolationLevel(Enum):
+    READ_UNCOMMITTED = 1
+    READ_COMMITTED = 2
+    REPEATABLE_READ = 3
+    SERIALIZABLE = 4
 
 class Atomix:
     def __init__(self):
@@ -17,7 +24,28 @@ class Atomix:
         with self._lock:
             self.data.update(self._transactions[identity_id])
             self._transactions[identity_id].clear()
+    
+    def set_isolation_level(self, level):
+        self.isolation_level = level
 
+    def read(self, identity_id, key):
+        if self.isolation_level == IsolationLevel.READ_UNCOMMITTED:
+            return self._transactions[identity_id].get(key, self.data.get(key))
+        
+        elif self.isolation_level == IsolationLevel.READ_COMMITTED:
+            with self._lock:
+                return self.data.get(key)
+        
+        elif self.isolation_level == IsolationLevel.REPEATABLE_READ:
+            if key not in self._transactions[identity_id]:
+                with self._lock:
+                    self._transactions[identity_id][key] = self.data.get(key)
+            return self._transactions[identity_id][key]
+        
+        elif self.isolation_level == IsolationLevel.SERIALIZABLE:
+            with self._lock:
+                return self.data.get(key)
+            
     def abort(self, identity_id):
         self._transactions[identity_id].clear()
     
