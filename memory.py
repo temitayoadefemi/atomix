@@ -39,15 +39,6 @@ class Atomix:
     def abort(self, identity_id):
         self._transactions[identity_id].clear()
 
-    def add_latest_version(self, key, identity_id):
-        with self._lock:
-            versions = self.version_history[identity_id][key]
-            if versions:
-                latest_version = versions[-1]
-                self._transactions[identity_id][key] = latest_version
-            else:
-                return None
-
     def read(self, identity_id, key, transaction_version, isolation_level):
         with self._lock:
             if isolation_level == IsolationLevel.READ_UNCOMMITTED:
