@@ -49,12 +49,14 @@ class Atomix:
     def abort(self, identity_id):
         self._transactions[identity_id].clear()
     
-    def read(self, identity_id, key):
-        if key in self._transactions[identity_id]:
-            return self._transactions[identity_id][key]
+    def read(self, identity_id, key, read_version):
         with self._lock:
-            return self.data[key]  
-    
+            versions = self.version.history[key]
+            for version in reversed(versions):
+                if version.version <= read_version and not version.deleted:
+                    return version.value
+                return None
+            
     def write(self, identity_id, key, value):
         self._transactions[identity_id][key] = value
 
